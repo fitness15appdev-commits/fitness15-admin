@@ -299,24 +299,36 @@ function activateMember(sheet, data) {
       return createResponse(false, "Member with this number not found");
     }
     
-    // Calculate start and end dates
-    const startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
+    // Check if duration is "Daily"
+    const isDaily = data.duration === "Daily" || data.duration.toLowerCase() === "daily";
     
-    const durationMonths = parseInt(data.duration);
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + durationMonths);
+    // Calculate start and end dates (only if not Daily)
+    let formattedStartDate = "";
+    let formattedEndDate = "";
+    let lastPaymentDate = "";
     
-    // Format dates (MM/DD/YYYY)
-    const startMonth = startDate.getMonth() + 1;
-    const startDay = startDate.getDate();
-    const startYear = startDate.getFullYear();
-    const formattedStartDate = startMonth + "/" + startDay + "/" + startYear;
-    
-    const endMonth = endDate.getMonth() + 1;
-    const endDay = endDate.getDate();
-    const endYear = endDate.getFullYear();
-    const formattedEndDate = endMonth + "/" + endDay + "/" + endYear;
+    if (!isDaily) {
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      
+      const durationMonths = parseInt(data.duration);
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + durationMonths);
+      
+      // Format dates (MM/DD/YYYY)
+      const startMonth = startDate.getMonth() + 1;
+      const startDay = startDate.getDate();
+      const startYear = startDate.getFullYear();
+      formattedStartDate = startMonth + "/" + startDay + "/" + startYear;
+      
+      const endMonth = endDate.getMonth() + 1;
+      const endDay = endDate.getDate();
+      const endYear = endDate.getFullYear();
+      formattedEndDate = endMonth + "/" + endDay + "/" + endYear;
+      
+      // Set Last Payment Date - for activation, it's the start date
+      lastPaymentDate = formattedStartDate;
+    }
     
     // Get membership fees
     const membershipFees = parseFloat(data.membershipFees) || 0;
@@ -344,28 +356,28 @@ function activateMember(sheet, data) {
         }
       }
     } else {
-      // For full payment, set next payment = membership fees and due date = end date
+      // For full payment, set next payment = membership fees
       nextPayment = membershipFees;
+      // Due date = end date (only if not Daily)
       paymentDueDate = formattedEndDate;
     }
-    
-    // Set Last Payment Date - for activation, it's the start date
-    const lastPaymentDate = formattedStartDate;
     
     // Calculate Total Paid - if Full payment, it's the membership fees, otherwise 0
     const totalPaid = (paymentType === "Full" && membershipFees) ? membershipFees : 0;
     
     // Update the row
     sheet.getRange(memberRow, 4).setValue(data.membershipType); // Membership Type
-    sheet.getRange(memberRow, 5).setValue(data.duration + " Month(s)"); // Duration
-    sheet.getRange(memberRow, 6).setValue(formattedStartDate); // Start Date
-    sheet.getRange(memberRow, 7).setValue(formattedEndDate); // End Date
+    // Duration: "Daily" or "X Month(s)"
+    const durationDisplay = isDaily ? "Daily" : (data.duration + " Month(s)");
+    sheet.getRange(memberRow, 5).setValue(durationDisplay); // Duration
+    sheet.getRange(memberRow, 6).setValue(formattedStartDate); // Start Date (empty for Daily)
+    sheet.getRange(memberRow, 7).setValue(formattedEndDate); // End Date (empty for Daily)
     sheet.getRange(memberRow, 8).setValue("Active"); // Status
     sheet.getRange(memberRow, 9).setValue(membershipFees); // Membership Fees
     sheet.getRange(memberRow, 10).setValue(paymentType); // Payment Type
     sheet.getRange(memberRow, 11).setValue(nextPayment); // Next Payment
-    sheet.getRange(memberRow, 12).setValue(paymentDueDate); // Payment Due Date
-    sheet.getRange(memberRow, 13).setValue(lastPaymentDate); // Last Payment Date
+    sheet.getRange(memberRow, 12).setValue(paymentDueDate); // Payment Due Date (empty for Daily)
+    sheet.getRange(memberRow, 13).setValue(lastPaymentDate); // Last Payment Date (empty for Daily)
     sheet.getRange(memberRow, 15).setValue(totalPaid); // Total Paid
     
     // Format the updated row
