@@ -18,6 +18,7 @@
 
 // Configuration
 const SHEET_NAME = "Members"; // Change this to match your sheet name
+const PAYMENTS_SHEET_NAME = "Payments"; // Name of the payments tracking sheet
 const SPREADSHEET_ID = ""; // Optional: Leave empty to use active spreadsheet, or paste your spreadsheet ID
 
 /**
@@ -231,9 +232,6 @@ function addMember(sheet, data) {
     // Set Last Payment Date - for first time payment, it's the start date
     const lastPaymentDate = formattedStartDate;
     
-    // Calculate Total Paid - if Full payment, it's the membership fees, otherwise 0
-    const totalPaid = (paymentType === "Full" && membershipFees) ? membershipFees : 0;
-    
     // Prepare row data
     const rowData = [
       new Date().toISOString(), // Timestamp
@@ -249,8 +247,7 @@ function addMember(sheet, data) {
       nextPayment, // Next Payment
       paymentDueDate, // Payment Due Date
       lastPaymentDate, // Last Payment Date
-      "", // Special Notes (empty for admin-added members)
-      totalPaid // Total Paid
+      "" // Special Notes (empty for admin-added members)
     ];
     
     // Append the row
@@ -259,6 +256,28 @@ function addMember(sheet, data) {
     // Format the new row
     const newRow = sheet.getLastRow();
     formatRow(sheet, newRow);
+    
+    // Record payment in Payments sheet if payment was made
+    const ss = sheet.getParent();
+    if (membershipFees && membershipFees > 0) {
+      let paymentAmount = 0;
+      if (paymentType === "Full") {
+        paymentAmount = membershipFees;
+      } else if (paymentType === "Partial") {
+        // For partial payment, record the amount paid (membership fees - next payment)
+        const nextPaymentValue = parseFloat(nextPayment) || 0;
+        paymentAmount = membershipFees - nextPaymentValue;
+      }
+      
+      if (paymentAmount > 0) {
+        addPaymentRecord(ss, {
+          paymentDate: formattedStartDate,
+          customerName: data.name,
+          mobileNumber: data.number,
+          amount: paymentAmount
+        });
+      }
+    }
     
     return createResponse(true, "Member added successfully");
   } catch (error) {
@@ -362,9 +381,6 @@ function activateMember(sheet, data) {
       paymentDueDate = formattedEndDate;
     }
     
-    // Calculate Total Paid - if Full payment, it's the membership fees, otherwise 0
-    const totalPaid = (paymentType === "Full" && membershipFees) ? membershipFees : 0;
-    
     // Update the row
     sheet.getRange(memberRow, 4).setValue(data.membershipType); // Membership Type
     // Duration: "Daily" or "X Month(s)"
@@ -378,10 +394,35 @@ function activateMember(sheet, data) {
     sheet.getRange(memberRow, 11).setValue(nextPayment); // Next Payment
     sheet.getRange(memberRow, 12).setValue(paymentDueDate); // Payment Due Date (empty for Daily)
     sheet.getRange(memberRow, 13).setValue(lastPaymentDate); // Last Payment Date (empty for Daily)
-    sheet.getRange(memberRow, 15).setValue(totalPaid); // Total Paid
     
     // Format the updated row
     formatRow(sheet, memberRow);
+    
+    // Record payment in Payments sheet if payment was made
+    const ss = sheet.getParent();
+    if (membershipFees && membershipFees > 0) {
+      let paymentAmount = 0;
+      if (paymentType === "Full") {
+        paymentAmount = membershipFees;
+      } else if (paymentType === "Partial") {
+        // For partial payment, record the amount paid (membership fees - next payment)
+        const nextPaymentValue = parseFloat(nextPayment) || 0;
+        paymentAmount = membershipFees - nextPaymentValue;
+      }
+      
+      if (paymentAmount > 0) {
+        // Get member name from the row
+        const memberName = sheet.getRange(memberRow, 2).getValue();
+        const memberNumber = sheet.getRange(memberRow, 3).getValue();
+        
+        addPaymentRecord(ss, {
+          paymentDate: formattedStartDate || new Date(),
+          customerName: memberName,
+          mobileNumber: memberNumber,
+          amount: paymentAmount
+        });
+      }
+    }
     
     return createResponse(true, "Member activated successfully");
   } catch (error) {
@@ -401,18 +442,11 @@ function addCustomer(sheet, data) {
     if (lastRow === 0) {
       setupSheetHeaders(sheet);
     } else {
-      // Check if Special Notes and Total Paid columns exist
+      // Check if Special Notes column exists
       const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       if (headerRow.length < 14 || headerRow[13] !== "Special Notes") {
         // Add Special Notes header if it doesn't exist
         sheet.getRange(1, 14).setValue("Special Notes");
-      }
-      if (headerRow.length < 15 || headerRow[14] !== "Total Paid") {
-        // Add Total Paid header if it doesn't exist
-        sheet.getRange(1, 15).setValue("Total Paid");
-        // Format Total Paid column
-        const totalPaidColumn = sheet.getRange(2, 15, sheet.getMaxRows() - 1, 1);
-        totalPaidColumn.setNumberFormat("#,##0");
       }
       
       // Check if phone number already exists
@@ -438,8 +472,7 @@ function addCustomer(sheet, data) {
       "", // Next Payment (to be filled by admin)
       "", // Payment Due Date (to be filled by admin)
       "", // Last Payment Date (to be filled by admin)
-      data.specialNotes || "", // Special Notes
-      0 // Total Paid (starts at 0)
+      data.specialNotes || "" // Special Notes
     ];
     
     // Append the row
@@ -492,20 +525,26 @@ function addDailyPass(sheet, data) {
     const currentFeesValue = sheet.getRange(memberRow, 9).getValue();
     const currentFees = parseFloat(currentFeesValue) || 0;
     
-    // Get current Total Paid (column 15)
-    const currentTotalPaidValue = sheet.getRange(memberRow, 15).getValue();
-    const currentTotalPaid = parseFloat(currentTotalPaidValue) || 0;
-    
-    // Add 70 rs to both Membership Fees and Total Paid
+    // Add 70 rs to Membership Fees
     const newFees = currentFees + 70;
-    const newTotalPaid = currentTotalPaid + 70;
     
     // Update the row
     sheet.getRange(memberRow, 9).setValue(newFees); // Membership Fees
-    sheet.getRange(memberRow, 15).setValue(newTotalPaid); // Total Paid
     
     // Format the updated row
     formatRow(sheet, memberRow);
+    
+    // Record payment in Payments sheet
+    const ss = sheet.getParent();
+    const memberName = sheet.getRange(memberRow, 2).getValue(); // Name column
+    const memberNumber = sheet.getRange(memberRow, 3).getValue(); // Phone Number column
+    
+    addPaymentRecord(ss, {
+      paymentDate: new Date(),
+      customerName: memberName,
+      mobileNumber: memberNumber,
+      amount: 70
+    });
     
     return createResponse(true, "Daily pass added successfully. ₹70 added to membership fees.");
   } catch (error) {
@@ -697,6 +736,39 @@ function extendMembership(sheet, data) {
     // Update Last Payment Date if payment date provided
     if (formattedPaymentDate) {
       sheet.getRange(memberRow, 13).setValue(formattedPaymentDate); // Update Last Payment Date (column 13)
+      
+      // Record payment in Payments sheet if payment date is provided
+      const ss = sheet.getParent();
+      const memberName = sheet.getRange(memberRow, 2).getValue(); // Name column
+      const memberNumber = sheet.getRange(memberRow, 3).getValue(); // Phone Number column
+      const membershipFees = sheet.getRange(memberRow, 9).getValue(); // Membership Fees column
+      
+      // Get payment amount (use membership fees as payment amount for extension)
+      let paymentAmount = 0;
+      if (membershipFees) {
+        paymentAmount = parseFloat(String(membershipFees).replace(/[^\d.-]/g, ''));
+        if (isNaN(paymentAmount)) {
+          paymentAmount = 0;
+        }
+      }
+      
+      if (paymentAmount > 0) {
+        // Parse payment date for the record
+        let paymentDateForRecord = new Date();
+        if (data.paymentDate && data.paymentDate.toLowerCase() !== "today") {
+          const dateParts = data.paymentDate.split('-');
+          if (dateParts.length === 3) {
+            paymentDateForRecord = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+          }
+        }
+        
+        addPaymentRecord(ss, {
+          paymentDate: paymentDateForRecord,
+          customerName: memberName,
+          mobileNumber: memberNumber,
+          amount: paymentAmount
+        });
+      }
     }
     
     // Update Next Payment Date to be the end date
@@ -727,8 +799,7 @@ function setupSheetHeaders(sheet) {
     "Next Payment",
     "Payment Due Date",
     "Last Payment Date",
-    "Special Notes",
-    "Total Paid"
+    "Special Notes"
   ];
   
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -753,17 +824,135 @@ function setupSheetHeaders(sheet) {
   // Set Next Payment column to number format
   const nextPaymentColumn = sheet.getRange(2, 11, sheet.getMaxRows() - 1, 1);
   nextPaymentColumn.setNumberFormat("#,##0");
+}
+
+/**
+ * Set up Payments sheet headers
+ */
+function setupPaymentsSheetHeaders(paymentsSheet) {
+  const headers = [
+    "Payment Date",
+    "Customer Name",
+    "Mobile Number",
+    "Amount"
+  ];
   
-  // Set Total Paid column to number format
-  const totalPaidColumn = sheet.getRange(2, 15, sheet.getMaxRows() - 1, 1);
-  totalPaidColumn.setNumberFormat("#,##0");
+  paymentsSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  
+  // Format header row
+  const headerRange = paymentsSheet.getRange(1, 1, 1, headers.length);
+  headerRange.setBackground("#34a853");
+  headerRange.setFontColor("#ffffff");
+  headerRange.setFontWeight("bold");
+  headerRange.setHorizontalAlignment("center");
+  
+  // Freeze header row
+  paymentsSheet.setFrozenRows(1);
+  
+  // Auto-resize columns
+  paymentsSheet.autoResizeColumns(1, headers.length);
+  
+  // Set Amount column to number format
+  const amountColumn = paymentsSheet.getRange(2, 4, paymentsSheet.getMaxRows() - 1, 1);
+  amountColumn.setNumberFormat("#,##0");
+  
+  // Set Payment Date column to date format
+  const dateColumn = paymentsSheet.getRange(2, 1, paymentsSheet.getMaxRows() - 1, 1);
+  dateColumn.setNumberFormat("MM/DD/YYYY");
+}
+
+/**
+ * Get or create Payments sheet
+ */
+function getOrCreatePaymentsSheet(ss) {
+  let paymentsSheet = ss.getSheetByName(PAYMENTS_SHEET_NAME);
+  
+  if (!paymentsSheet) {
+    paymentsSheet = ss.insertSheet(PAYMENTS_SHEET_NAME);
+    setupPaymentsSheetHeaders(paymentsSheet);
+  } else {
+    // Check if headers exist
+    const lastRow = paymentsSheet.getLastRow();
+    if (lastRow === 0) {
+      setupPaymentsSheetHeaders(paymentsSheet);
+    }
+  }
+  
+  return paymentsSheet;
+}
+
+/**
+ * Add a payment record to the Payments sheet
+ */
+function addPaymentRecord(ss, paymentData) {
+  try {
+    const paymentsSheet = getOrCreatePaymentsSheet(ss);
+    
+    // Format payment date (MM/DD/YYYY)
+    let formattedPaymentDate = "";
+    if (paymentData.paymentDate) {
+      if (paymentData.paymentDate instanceof Date) {
+        const month = paymentData.paymentDate.getMonth() + 1;
+        const day = paymentData.paymentDate.getDate();
+        const year = paymentData.paymentDate.getFullYear();
+        formattedPaymentDate = month + "/" + day + "/" + year;
+      } else if (typeof paymentData.paymentDate === 'string') {
+        // Try to parse YYYY-MM-DD format
+        const dateParts = paymentData.paymentDate.split('-');
+        if (dateParts.length === 3) {
+          formattedPaymentDate = dateParts[1] + "/" + dateParts[2] + "/" + dateParts[0];
+        } else {
+          formattedPaymentDate = paymentData.paymentDate;
+        }
+      } else {
+        formattedPaymentDate = new Date().toLocaleDateString('en-US');
+      }
+    } else {
+      formattedPaymentDate = new Date().toLocaleDateString('en-US');
+    }
+    
+    // Prepare row data
+    const rowData = [
+      formattedPaymentDate, // Payment Date
+      paymentData.customerName || "", // Customer Name
+      paymentData.mobileNumber || "", // Mobile Number
+      paymentData.amount || 0 // Amount
+    ];
+    
+    // Append the row
+    paymentsSheet.appendRow(rowData);
+    
+    // Format the new row
+    const newRow = paymentsSheet.getLastRow();
+    const rowRange = paymentsSheet.getRange(newRow, 1, 1, 4);
+    rowRange.setHorizontalAlignment("left");
+    rowRange.setVerticalAlignment("middle");
+    
+    // Format Amount column as number
+    paymentsSheet.getRange(newRow, 4).setNumberFormat("#,##0");
+    
+    // Format Payment Date column as date
+    paymentsSheet.getRange(newRow, 1).setNumberFormat("MM/DD/YYYY");
+    
+    // Alternate row colors for better readability
+    if (newRow % 2 === 0) {
+      rowRange.setBackground("#f8f9fa");
+    } else {
+      rowRange.setBackground("#ffffff");
+    }
+    
+    return true;
+  } catch (error) {
+    Logger.log("Error adding payment record: " + error.toString());
+    return false;
+  }
 }
 
 /**
  * Format a data row
  */
 function formatRow(sheet, row) {
-  const range = sheet.getRange(row, 1, 1, 15);
+  const range = sheet.getRange(row, 1, 1, 14);
   range.setHorizontalAlignment("left");
   range.setVerticalAlignment("middle");
   range.setWrap(true);
@@ -775,10 +964,6 @@ function formatRow(sheet, row) {
   // Format Next Payment column as number
   const nextPaymentCell = sheet.getRange(row, 11);
   nextPaymentCell.setNumberFormat("#,##0");
-  
-  // Format Total Paid column as number
-  const totalPaidCell = sheet.getRange(row, 15);
-  totalPaidCell.setNumberFormat("#,##0");
   
   // Alternate row colors for better readability
   if (row % 2 === 0) {
@@ -817,7 +1002,7 @@ function getDashboardData(sheet, dateRange, startDate, endDate) {
       });
     }
     
-    // Get all member data (skip header row) - now 14 columns including Last Payment Date and Special Notes
+    // Get all member data (skip header row) - now 14 columns (removed Total Paid)
     const dataRange = sheet.getRange(2, 1, lastRow - 1, 14);
     const allData = dataRange.getValues();
     
@@ -843,9 +1028,52 @@ function getDashboardData(sheet, dateRange, startDate, endDate) {
     }
     // "all" or default: no date filtering
     
+    // Calculate totalMembershipCost from Payments sheet
+    let totalMembershipCost = 0;
+    try {
+      const ss = sheet.getParent();
+      const paymentsSheet = ss.getSheetByName(PAYMENTS_SHEET_NAME);
+      if (paymentsSheet) {
+        const paymentsLastRow = paymentsSheet.getLastRow();
+        if (paymentsLastRow > 1) {
+          // Get all payment data (skip header row)
+          // Columns: Payment Date (1), Customer Name (2), Mobile Number (3), Amount (4)
+          const paymentsDataRange = paymentsSheet.getRange(2, 1, paymentsLastRow - 1, 4);
+          const paymentsData = paymentsDataRange.getValues();
+          
+          for (let i = 0; i < paymentsData.length; i++) {
+            const paymentRow = paymentsData[i];
+            const paymentDateStr = paymentRow[0]; // Payment Date
+            const amount = paymentRow[3]; // Amount
+            
+            // Apply date range filter
+            let shouldInclude = true;
+            if (dateRange !== "all" && filterStartDate && filterEndDate) {
+              const paymentDate = parseSheetDate(paymentDateStr);
+              if (paymentDate) {
+                paymentDate.setHours(0, 0, 0, 0);
+                shouldInclude = (paymentDate >= filterStartDate && paymentDate <= filterEndDate);
+              } else {
+                shouldInclude = false;
+              }
+            }
+            
+            if (shouldInclude && amount) {
+              const amountValue = parseFloat(String(amount).replace(/[^\d.-]/g, ''));
+              if (!isNaN(amountValue) && amountValue > 0) {
+                totalMembershipCost += amountValue;
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      Logger.log("Error calculating total from Payments sheet: " + error.toString());
+      // Continue with 0 if Payments sheet doesn't exist or has errors
+    }
+    
     let activeMembers = 0;
     let expiringSoon = 0;
-    let totalMembershipCost = 0;
     let activationPending = 0;
     let paymentsDue = 0;
     let totalPendingAmount = 0;
@@ -879,44 +1107,6 @@ function getDashboardData(sheet, dateRange, startDate, endDate) {
       // Check if member is active (must have payment type filled)
       if (status === "Active" && paymentTypeStr && paymentTypeStr !== "") {
         activeMembers++;
-        
-        // Add membership fees to total based on date range filter
-        if (membershipFees) {
-          const feesValue = parseFloat(String(membershipFees).replace(/[^\d.-]/g, ''));
-          if (!isNaN(feesValue) && feesValue > 0) {
-            // Apply date range filter for subscription cost
-            let shouldInclude = true;
-            if (dateRange !== "all" && filterStartDate && filterEndDate) {
-              // Check if last payment date falls within the range
-              if (lastPaymentDateStr) {
-                const lastPaymentDate = parseSheetDate(lastPaymentDateStr);
-                if (lastPaymentDate) {
-                  shouldInclude = (lastPaymentDate >= filterStartDate && lastPaymentDate <= filterEndDate);
-                } else {
-                  // If no last payment date, use start date
-                  const startDateParsed = parseSheetDate(row[5]); // Start Date column
-                  if (startDateParsed) {
-                    shouldInclude = (startDateParsed >= filterStartDate && startDateParsed <= filterEndDate);
-                  } else {
-                    shouldInclude = false;
-                  }
-                }
-              } else {
-                // If no last payment date, use start date
-                const startDateParsed = parseSheetDate(row[5]); // Start Date column
-                if (startDateParsed) {
-                  shouldInclude = (startDateParsed >= filterStartDate && startDateParsed <= filterEndDate);
-                } else {
-                  shouldInclude = false;
-                }
-              }
-            }
-            
-            if (shouldInclude) {
-              totalMembershipCost += feesValue;
-            }
-          }
-        }
         
         // Check if expiring soon (within 10 days) and payment due date
         let isExpiringSoon = false;
@@ -1033,7 +1223,7 @@ function getExpiredMembers(sheet) {
       return createDataResponse([]);
     }
     
-    // Get all member data (skip header row) - 14 columns including Special Notes
+    // Get all member data (skip header row) - 14 columns (removed Total Paid)
     const dataRange = sheet.getRange(2, 1, lastRow - 1, 14);
     const allData = dataRange.getValues();
     
@@ -1242,14 +1432,19 @@ function markPaymentPaid(sheet, data) {
     // Update Last Payment Date (column 13) with the payment date
     sheet.getRange(memberRow, 13).setValue(formattedPaymentDate);
     
-    // Update Total Paid (column 15) - add the payment amount
-    const currentTotalPaidValue = sheet.getRange(memberRow, 15).getValue();
-    const currentTotalPaid = parseFloat(currentTotalPaidValue) || 0;
-    
-    // Add payment amount to Total Paid
-    const newTotalPaid = currentTotalPaid + paymentAmount;
-    sheet.getRange(memberRow, 15).setValue(newTotalPaid);
-    sheet.getRange(memberRow, 15).setNumberFormat("#,##0");
+    // Record payment in Payments sheet
+    if (paymentAmount > 0) {
+      const ss = sheet.getParent();
+      const memberName = sheet.getRange(memberRow, 2).getValue(); // Name column
+      const memberNumber = sheet.getRange(memberRow, 3).getValue(); // Phone Number column
+      
+      addPaymentRecord(ss, {
+        paymentDate: paymentDate,
+        customerName: memberName,
+        mobileNumber: memberNumber,
+        amount: paymentAmount
+      });
+    }
     
     return createResponse(true, "Payment marked as paid successfully");
   } catch (error) {
