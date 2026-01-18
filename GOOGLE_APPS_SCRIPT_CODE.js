@@ -19,6 +19,7 @@
 // Configuration
 const SHEET_NAME = "Members"; // Change this to match your sheet name
 const PAYMENTS_SHEET_NAME = "Payments"; // Name of the payments tracking sheet
+const MEMBERSHIP_DETAILS_SHEET_NAME = "Membership Details"; // Name of the membership details sheet
 const SPREADSHEET_ID = ""; // Optional: Leave empty to use active spreadsheet, or paste your spreadsheet ID
 
 /**
@@ -80,10 +81,21 @@ function doGet(e) {
       const customerData = {
         name: e.parameter.name,
         number: e.parameter.number,
-        specialNotes: e.parameter.specialNotes || "",
+        email: e.parameter.email || "",
+        dateOfBirth: e.parameter.dateOfBirth || "",
+        emergencyContactName: e.parameter.emergencyContactName || "",
+        emergencyContactPhone: e.parameter.emergencyContactPhone || "",
+        medicalNotes: e.parameter.medicalNotes || "",
+        goal: e.parameter.goal || "",
+        membershipTypeSelection: e.parameter.membershipTypeSelection || "",
         timestamp: e.parameter.timestamp || new Date().toISOString()
       };
       return addCustomer(sheet, customerData);
+    } else if (action === "getMemberDetails") {
+      const memberData = {
+        number: e.parameter.number
+      };
+      return getMemberDetails(sheet, memberData);
     } else if (action === "activateMember") {
       const activateData = {
         number: e.parameter.number,
@@ -381,8 +393,14 @@ function activateMember(sheet, data) {
       paymentDueDate = formattedEndDate;
     }
     
-    // Update the row
-    sheet.getRange(memberRow, 4).setValue(data.membershipType); // Membership Type
+    // Update the row - Membership Type should already be set from initial registration
+    // If not set, keep the existing value (which should be from the customer's selection)
+    const existingMembershipType = sheet.getRange(memberRow, 4).getValue();
+    if (!existingMembershipType || existingMembershipType === "") {
+      // If no membership type is set, we could set a default, but for now we'll leave it empty
+      // The admin can set it later if needed
+      sheet.getRange(memberRow, 4).setValue(""); // Membership Type
+    }
     // Duration: "Daily" or "X Month(s)"
     const durationDisplay = isDaily ? "Daily" : (data.duration + " Month(s)");
     sheet.getRange(memberRow, 5).setValue(durationDisplay); // Duration
@@ -432,13 +450,70 @@ function activateMember(sheet, data) {
 }
 
 /**
- * Add customer information (simplified form for customers)
+ * Set up Membership Details sheet headers
+ */
+function setupMembershipDetailsSheetHeaders(detailsSheet) {
+  const headers = [
+    "Phone Number",
+    "Email",
+    "Date of Birth",
+    "Emergency Contact Name",
+    "Emergency Contact Phone",
+    "Medical Notes",
+    "Goal",
+    "Membership Type Selection",
+    "Timestamp"
+  ];
+  
+  detailsSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  
+  // Format header row
+  const headerRange = detailsSheet.getRange(1, 1, 1, headers.length);
+  headerRange.setBackground("#9c27b0");
+  headerRange.setFontColor("#ffffff");
+  headerRange.setFontWeight("bold");
+  headerRange.setHorizontalAlignment("center");
+  
+  // Freeze header row
+  detailsSheet.setFrozenRows(1);
+  
+  // Auto-resize columns
+  detailsSheet.autoResizeColumns(1, headers.length);
+  
+  // Set Date of Birth column to date format
+  const dobColumn = detailsSheet.getRange(2, 3, detailsSheet.getMaxRows() - 1, 1);
+  dobColumn.setNumberFormat("MM/DD/YYYY");
+}
+
+/**
+ * Get or create Membership Details sheet
+ */
+function getOrCreateMembershipDetailsSheet(ss) {
+  let detailsSheet = ss.getSheetByName(MEMBERSHIP_DETAILS_SHEET_NAME);
+  
+  if (!detailsSheet) {
+    detailsSheet = ss.insertSheet(MEMBERSHIP_DETAILS_SHEET_NAME);
+    setupMembershipDetailsSheetHeaders(detailsSheet);
+  } else {
+    // Check if headers exist
+    const lastRow = detailsSheet.getLastRow();
+    if (lastRow === 0) {
+      setupMembershipDetailsSheetHeaders(detailsSheet);
+    }
+  }
+  
+  return detailsSheet;
+}
+
+/**
+ * Add customer information - splits data between Members and Membership Details sheets
  */
 function addCustomer(sheet, data) {
   try {
+    const ss = sheet.getParent();
     const lastRow = sheet.getLastRow();
     
-    // Check if headers need to be updated (if Special Notes column doesn't exist)
+    // Check if headers need to be updated
     if (lastRow === 0) {
       setupSheetHeaders(sheet);
     } else {
@@ -457,12 +532,12 @@ function addCustomer(sheet, data) {
       }
     }
     
-    // Prepare row data - leave admin fields empty/default
+    // Store name, phone number, and membership type in Members sheet
     const rowData = [
       new Date().toISOString(), // Timestamp
       data.name, // Name
       data.number, // Phone Number
-      "", // Membership Type (to be filled by admin)
+      data.membershipTypeSelection || "", // Membership Type (from customer selection)
       "", // Duration (to be filled by admin)
       "", // Start Date (to be filled by admin)
       "", // End Date (to be filled by admin)
@@ -472,20 +547,160 @@ function addCustomer(sheet, data) {
       "", // Next Payment (to be filled by admin)
       "", // Payment Due Date (to be filled by admin)
       "", // Last Payment Date (to be filled by admin)
-      data.specialNotes || "" // Special Notes
+      "" // Special Notes (empty, details in separate sheet)
     ];
     
-    // Append the row
+    // Append the row to Members sheet
     sheet.appendRow(rowData);
     
     // Format the new row
     const newRow = sheet.getLastRow();
     formatRow(sheet, newRow);
     
+    // Store all other details in Membership Details sheet
+    const detailsSheet = getOrCreateMembershipDetailsSheet(ss);
+    
+    // Format date of birth (convert from YYYY-MM-DD to MM/DD/YYYY)
+    let formattedDateOfBirth = "";
+    if (data.dateOfBirth) {
+      const dateParts = data.dateOfBirth.split('-');
+      if (dateParts.length === 3) {
+        formattedDateOfBirth = dateParts[1] + "/" + dateParts[2] + "/" + dateParts[0];
+      } else {
+        formattedDateOfBirth = data.dateOfBirth;
+      }
+    }
+    
+    const detailsRowData = [
+      data.number, // Phone Number (linking key)
+      data.email || "", // Email
+      formattedDateOfBirth, // Date of Birth
+      data.emergencyContactName || "", // Emergency Contact Name
+      data.emergencyContactPhone || "", // Emergency Contact Phone
+      data.medicalNotes || "", // Medical Notes
+      data.goal || "", // Goal
+      data.membershipTypeSelection || "", // Membership Type Selection
+      new Date().toISOString() // Timestamp
+    ];
+    
+    // Append the row to Membership Details sheet
+    detailsSheet.appendRow(detailsRowData);
+    
+    // Format the new row in Membership Details sheet
+    const detailsNewRow = detailsSheet.getLastRow();
+    const detailsRowRange = detailsSheet.getRange(detailsNewRow, 1, 1, 9);
+    detailsRowRange.setHorizontalAlignment("left");
+    detailsRowRange.setVerticalAlignment("middle");
+    detailsRowRange.setWrap(true);
+    
+    // Format Date of Birth column as date
+    detailsSheet.getRange(detailsNewRow, 3).setNumberFormat("MM/DD/YYYY");
+    
+    // Alternate row colors for better readability
+    if (detailsNewRow % 2 === 0) {
+      detailsRowRange.setBackground("#f8f9fa");
+    } else {
+      detailsRowRange.setBackground("#ffffff");
+    }
+    
     return createResponse(true, "Customer information submitted successfully");
   } catch (error) {
     Logger.log("Error adding customer: " + error.toString());
     return createResponse(false, "Error adding customer: " + error.toString());
+  }
+}
+
+/**
+ * Get member details from both Members and Membership Details sheets
+ */
+function getMemberDetails(sheet, data) {
+  try {
+    const ss = sheet.getParent();
+    const lastRow = sheet.getLastRow();
+
+    if (lastRow === 0 || lastRow === 1) {
+      return createResponse(false, "No members found in the system");
+    }
+
+    // Get all member data from Members sheet (skip header row)
+    const dataRange = sheet.getRange(2, 1, lastRow - 1, 14);
+    const allData = dataRange.getValues();
+
+    // Normalize phone number for comparison
+    const normalizedInput = data.number.replace(/[\s\-\(\)]/g, '');
+
+    // Find the member in Members sheet
+    let memberInfo = null;
+    for (let i = 0; i < allData.length; i++) {
+      const row = allData[i];
+      const existingNumber = String(row[2]).replace(/[\s\-\(\)]/g, ''); // Phone Number column (index 2)
+
+      if (existingNumber === normalizedInput) {
+        memberInfo = {
+          timestamp: row[0],
+          name: row[1],
+          phoneNumber: row[2],
+          membershipType: row[3],
+          duration: row[4],
+          startDate: row[5],
+          endDate: row[6],
+          status: row[7],
+          membershipFees: row[8],
+          paymentType: row[9],
+          nextPayment: row[10],
+          paymentDueDate: row[11],
+          lastPaymentDate: row[12],
+          specialNotes: row[13] || ""
+        };
+        break;
+      }
+    }
+
+    if (!memberInfo) {
+      return createResponse(false, "Member not found");
+    }
+
+    // Get additional details from Membership Details sheet
+    const detailsSheet = ss.getSheetByName(MEMBERSHIP_DETAILS_SHEET_NAME);
+    let additionalDetails = {};
+
+    if (detailsSheet) {
+      const detailsLastRow = detailsSheet.getLastRow();
+      if (detailsLastRow > 1) {
+        const detailsDataRange = detailsSheet.getRange(2, 1, detailsLastRow - 1, 9);
+        const detailsData = detailsDataRange.getValues();
+
+        for (let i = 0; i < detailsData.length; i++) {
+          const row = detailsData[i];
+          const existingNumber = String(row[0]).replace(/[\s\-\(\)]/g, ''); // Phone Number column (index 0)
+
+          if (existingNumber === normalizedInput) {
+            additionalDetails = {
+              email: row[1] || "",
+              dateOfBirth: row[2] || "",
+              emergencyContactName: row[3] || "",
+              emergencyContactPhone: row[4] || "",
+              medicalNotes: row[5] || "",
+              goal: row[6] || "",
+              membershipTypeSelection: row[7] || "",
+              detailsTimestamp: row[8] || ""
+            };
+            break;
+          }
+        }
+      }
+    }
+
+    // Combine the data
+    const completeMemberDetails = {
+      ...memberInfo,
+      ...additionalDetails
+    };
+
+    return createDataResponse(completeMemberDetails);
+  } catch (error) {
+    Logger.log("Error getting member details: " + error.toString());
+    return createResponse(false, "Error getting member details: " + error.toString());
   }
 }
 

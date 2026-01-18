@@ -5,7 +5,6 @@ import { GOOGLE_SCRIPT_URL } from "../constants/api";
 
 export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillData }) {
   const [formData, setFormData] = useState({
-    membershipType: "",
     duration: "",
     membershipFees: "",
     paymentType: "Full",
@@ -20,7 +19,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
   useEffect(() => {
     if (isOpen && prefillData) {
       setFormData({
-        membershipType: "",
         duration: "",
         membershipFees: "",
         paymentType: "Full",
@@ -31,15 +29,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
       setShowSuccess(false);
     }
   }, [isOpen, prefillData]);
-
-  const membershipTypes = [
-    "Basic",
-    "Premium",
-    "VIP",
-    "Student",
-    "Corporate",
-    "Pro",
-  ];
 
   const durationOptions = [
     { label: "Daily", value: "Daily" },
@@ -75,7 +64,7 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
     setError("");
 
     // Validation
-    if (!formData.membershipType || !formData.duration || !formData.membershipFees) {
+    if (!formData.duration || !formData.membershipFees) {
       setError("Please fill in all required fields");
       return;
     }
@@ -112,7 +101,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
       const params = new URLSearchParams({
         action: "activateMember",
         number: prefillData.number,
-        membershipType: formData.membershipType,
         duration: formData.duration,
         membershipFees: formData.membershipFees,
         paymentType: formData.paymentType,
@@ -147,7 +135,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
           setTimeout(() => {
             onSubmit(formData);
             setFormData({
-              membershipType: "",
               duration: "",
               membershipFees: "",
               paymentType: "Full",
@@ -176,7 +163,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
   const handleClose = () => {
     if (!showSuccess) {
       setFormData({
-        membershipType: "",
         duration: "",
         membershipFees: "",
         paymentType: "Full",
@@ -270,27 +256,6 @@ export default function ActivateMemberForm({ isOpen, onClose, onSubmit, prefillD
                 </div>
                 <form onSubmit={handleSubmit} className="add-member-form">
                   {error && <div className="form-error">{error}</div>}
-                  
-                  <div className="form-group">
-                    <label className="form-label">
-                      <Calendar className="form-icon" />
-                      Membership Type
-                    </label>
-                    <select
-                      name="membershipType"
-                      value={formData.membershipType}
-                      onChange={handleChange}
-                      className="form-input form-select"
-                      required
-                    >
-                      <option value="">Select membership type</option>
-                      {membershipTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
                   <div className="form-group">
                     <label className="form-label">

@@ -113,3 +113,47 @@ export async function fetchDashboardData(dateRange = "all", startDate = null, en
   }
 }
 
+/**
+ * Fetch member details from Google Sheets by phone number
+ */
+export async function fetchMemberDetails(phoneNumber) {
+  try {
+    const params = new URLSearchParams({
+      action: "getMemberDetails",
+      number: phoneNumber,
+    });
+
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?${params.toString()}`, {
+      method: "GET",
+      redirect: "follow",
+    });
+
+    if (response.ok) {
+      const text = await response.text();
+      let result;
+
+      try {
+        result = JSON.parse(text);
+      } catch (e) {
+        // Try to extract JSON from HTML if embedded
+        const jsonMatch = text.match(/\{.*"success".*\}/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("Could not parse response");
+        }
+      }
+
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || "Failed to fetch member details");
+      }
+    } else {
+      throw new Error("Failed to connect to server");
+    }
+  } catch (error) {
+    console.error("Error fetching member details:", error);
+    throw error;
+  }
+}

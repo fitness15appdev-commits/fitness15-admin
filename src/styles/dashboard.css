@@ -551,6 +551,14 @@
   opacity: 0.9;
 }
 
+.quick-action-button-4 {
+  background: linear-gradient(to right, #f59e0b, #f97316);
+}
+
+.quick-action-button-4:hover {
+  opacity: 0.9;
+}
+
 .quick-action-icon {
   width: 20px;
   height: 20px;
@@ -1252,4 +1260,120 @@
 .expired-member-item:hover {
   background: rgba(255, 255, 255, 0.15);
   transform: translateX(4px);
+}
+
+/* Member Details Modal Styles */
+.member-details-modal {
+  max-width: 800px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.member-search-form {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.member-details-content {
+  margin-top: 24px;
+}
+
+.member-info-section {
+  margin-bottom: 32px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #667eea;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-icon {
+  color: #667eea;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #ffffff;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.info-value {
+  color: #e5e7eb;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.status-active {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.status-pending {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.status-expired {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.special-notes {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  color: #e5e7eb;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .member-details-modal {
+    max-width: 95vw;
+    margin: 20px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .info-icon {
+    margin-top: 0;
+  }
 }

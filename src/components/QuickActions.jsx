@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { UserPlus, Calendar, XCircle, Sparkles } from "lucide-react";
+import { UserPlus, Calendar, XCircle, Sparkles, Search } from "lucide-react";
 import AddMemberForm from "./AddMemberForm";
 import ExtendMembershipForm from "./ExtendMembershipForm";
 import ExpiredMembers from "./ExpiredMembers";
+import MemberDetails from "./MemberDetails";
 
 const actions = [
   { label: "Add Member", icon: UserPlus, buttonClass: "quick-action-button-1", delay: 0, action: "addMember" },
   { label: "Extend Membership", icon: Calendar, buttonClass: "quick-action-button-2", delay: 0.1, action: "extend" },
-  { label: "Expired Members", icon: XCircle, buttonClass: "quick-action-button-3", delay: 0.2, action: "expired" },
+  { label: "Get Member Details", icon: Search, buttonClass: "quick-action-button-4", delay: 0.2, action: "memberDetails" },
+  { label: "Expired Members", icon: XCircle, buttonClass: "quick-action-button-3", delay: 0.3, action: "expired" },
 ];
 
 export default function QuickActions({ onMemberAdded }) {
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [isExtendFormOpen, setIsExtendFormOpen] = useState(false);
+  const [isMemberDetailsOpen, setIsMemberDetailsOpen] = useState(false);
   const [isExpiredMembersOpen, setIsExpiredMembersOpen] = useState(false);
 
   const handleActionClick = (action) => {
@@ -21,6 +24,8 @@ export default function QuickActions({ onMemberAdded }) {
       setIsAddFormOpen(true);
     } else if (action === "extend") {
       setIsExtendFormOpen(true);
+    } else if (action === "memberDetails") {
+      setIsMemberDetailsOpen(true);
     } else if (action === "expired") {
       setIsExpiredMembersOpen(true);
     } else {
@@ -77,10 +82,14 @@ export default function QuickActions({ onMemberAdded }) {
         onClose={() => setIsAddFormOpen(false)} 
         onSubmit={handleFormSubmit}
       />
-      <ExtendMembershipForm 
-        isOpen={isExtendFormOpen} 
-        onClose={() => setIsExtendFormOpen(false)} 
+      <ExtendMembershipForm
+        isOpen={isExtendFormOpen}
+        onClose={() => setIsExtendFormOpen(false)}
         onSubmit={handleFormSubmit}
+      />
+      <MemberDetails
+        isOpen={isMemberDetailsOpen}
+        onClose={() => setIsMemberDetailsOpen(false)}
       />
       <ExpiredMembers
         isOpen={isExpiredMembersOpen}
